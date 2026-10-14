@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portaria - Controle de Saída</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+  :root { --verde:#16A34A; --verde-esc:#14532D; --vermelho:#DC2626; --vermelho-esc:#7F1D1D;
+          --azul-esc:#0F172A; --azul:#1E293B; --texto:#F8FAFC; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; margin:0; overflow:hidden; font-family:'Segoe UI', Roboto, Arial, sans-serif; }
+  body { background: var(--azul-esc); color: var(--texto); transition: background .25s; }
+  body.ok  { background: var(--verde);    animation: flashOk 0.9s ease-in-out 2; }
+  body.bad { background: var(--vermelho); animation: flashBad 0.5s ease-in-out 4; }
+  @keyframes flashOk  { 50% { background: #22C55E; } }
+  @keyframes flashBad { 50% { background: #991B1B; } }
+
+  .layout { height:100%; display:flex; flex-direction:column; }
+  .topo { display:flex; justify-content:space-between; align-items:center; padding:14px 32px;
+          font-size:1.4rem; background:rgba(0,0,0,.25); }
+  .centro { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+            text-align:center; padding:16px 32px; min-height:0; }
+  .estado { display:none; width:100%; }
+  .estado.ativo { display:block; }
+
+  /* --- Aguardando --- */
+  .pulso { width:140px; height:140px; border-radius:50%; background:#38BDF8; margin:0 auto 28px;
+           display:flex; align-items:center; justify-content:center; font-size:4rem; color:#0F172A;
+           animation: pulsar 1.6s ease-out infinite; }
+  @keyframes pulsar { 0%{box-shadow:0 0 0 0 rgba(56,189,248,.7);} 100%{box-shadow:0 0 0 70px rgba(56,189,248,0);} }
+  .titulo-idle { font-size:clamp(2.2rem,5vw,4.5rem); font-weight:800; letter-spacing:1px; }
+  .sub-idle { font-size:1.6rem; color:#94A3B8; margin-top:8px; }
+
+  /* --- Resultado --- */
+  .icone { font-size:clamp(6rem,16vw,12rem); line-height:1; }
+  .veredito { font-size:clamp(3.5rem,10vw,8rem); font-weight:900; line-height:1.05; }
+  .motivo { font-size:clamp(1.6rem,3.5vw,3rem); font-weight:700; margin-top:10px; }
+  .card-dados { background:rgba(0,0,0,.25); border-radius:20px; padding:20px 40px; margin:22px auto 0;
+                max-width:1000px; text-align:left; font-size:clamp(1.3rem,2.6vw,2.2rem); }
+  .card-dados div { padding:4px 0; }
+  .card-dados b { opacity:.85; display:inline-block; min-width:230px; }
+  .instrucao { font-size:clamp(1.3rem,2.4vw,2rem); margin-top:18px; font-weight:600; }
+  .contador { position:absolute; right:32px; top:70px; font-size:2rem; background:rgba(0,0,0,.35);
+              border-radius:50px; padding:6px 22px; display:none; }
+  body.ok .contador, body.bad .contador { display:block; }
+
+  /* --- Campo de leitura (sempre em foco) --- */
+  .campo { width:100%; max-width:760px; margin:26px auto 0; }
+  #codigo { width:100%; font-size:2.4rem; padding:14px 24px; border-radius:16px; border:4px solid #38BDF8;
+            background:#fff; color:#0F172A; text-align:center; font-weight:700; outline:none; letter-spacing:2px; }
+  #codigo:focus { box-shadow:0 0 0 6px rgba(56,189,248,.45); }
+  body.ok #codigo, body.bad #codigo { opacity:.85; border-color:#fff; }
+
+  /* --- Últimas leituras --- */
+  .rodape { background:rgba(0,0,0,.35); padding:10px 32px 14px; }
+  .rodape h6 { margin:0 0 6px; color:#CBD5E1; font-size:1rem; letter-spacing:1px; }
+  .lista { display:flex; gap:10px; flex-wrap:nowrap; overflow:hidden; }
+  .item { flex:1; min-width:0; border-radius:10px; padding:8px 12px; font-size:1.05rem; background:#334155; }
+  .item.l { border-left:8px solid #22C55E; } .item.b { border-left:8px solid #EF4444; }
+  .item .cod { font-weight:800; font-size:1.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item small { color:#CBD5E1; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="topo">
+    <div><i class="fa-solid fa-laptop"></i>&nbsp; CONTROLE DE SAÍDA DE NOTEBOOKS</div>
+    <div id="relogio"></div>
+  </div>
+  <div class="contador" id="contador"></div>
+
+  <div class="centro">
+    <!-- Estado: aguardando -->
+    <div id="st-idle" class="estado ativo">
+      <div class="pulso"><i class="fa-solid fa-barcode"></i></div>
+      <div class="titulo-idle">BIPE A PLAQUETA PARA LIBERAR</div>
+      <div class="sub-idle">Aponte o leitor para o código de barras do notebook</div>
+    </div>
+
+    <!-- Estado: liberado -->
+    <div id="st-ok" class="estado">
+      <div class="icone"><i class="fa-solid fa-circle-check"></i></div>
+      <div class="veredito">✅ LIBERADO</div>
+      <div class="card-dados" id="dados"></div>
+      <div class="instrucao">Pode liberar a saída do equipamento.</div>
+    </div>
+
+    <!-- Estado: bloqueado -->
+    <div id="st-bad" class="estado">
+      <div class="icone"><i class="fa-solid fa-circle-xmark"></i></div>
+      <div class="veredito">❌ BLOQUEADO</div>
+      <div class="motivo" id="motivo"></div>
+      <div class="card-dados" id="dados-bad"></div>
+      <div class="instrucao">NÃO libere a saída. Retenha o equipamento e acione o responsável.</div>
+    </div>
+
+    <div class="campo">
+      <input id="codigo" type="text" autocomplete="off" autofocus placeholder="Código da plaqueta" aria-label="Código da plaqueta">
+    </div>
+  </div>
+
+  <div class="rodape">
+    <h6><i class="fa-regular fa-clock"></i> ÚLTIMAS 5 LEITURAS</h6>
+    <div class="lista" id="ultimas"></div>
+  </div>
+</div>
+
+<script>
+const TEMPO = 5;               // segundos exibindo o resultado
+const input = document.getElementById('codigo');
+let timer = null, restante = 0, audioCtx = null;
+
+/* ---------- Foco permanente no campo (leitor USB emula teclado) ---------- */
+function focar() { if (document.activeElement !== input) input.focus(); }
+setInterval(focar, 700);
+document.addEventListener('click', focar);
+input.addEventListener('blur', () => setTimeout(focar, 30));
+window.addEventListener('load', focar);
+
+/* ---------- Leitura: o leitor envia código + Enter ---------- */
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const codigo = input.value.trim();
+    input.value = '';                    // limpa automaticamente
+    if (codigo) validar(codigo);
+  }
+});
+
+async function validar(codigo) {
+  try {
+    const r = await fetch('/api/validar-saida', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigoPatrimonio: codigo })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    mostrar(await r.json(), codigo);
+  } catch (err) {
+    mostrar({ liberado: false, mensagem: 'Erro de comunicação com o servidor', autorizacao: null }, codigo);
+  }
+  carregarUltimas();
+}
+
+/* ---------- Exibição do resultado ---------- */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(dt) { return dt ? new Date(dt).toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' }) : 'Sem validade (não expira)'; }
+function setEstado(nome) {
+  ['idle','ok','bad'].forEach(n => document.getElementById('st-' + n).classList.toggle('ativo', n === nome));
+  document.body.className = nome === 'idle' ? '' : nome;
+}
+
+function mostrar(res, codigo) {
+  clearInterval(timer);
+  if (res.liberado) {
+    const a = res.autorizacao;
+    document.getElementById('dados').innerHTML =
+      `<div><b><i class="fa-solid fa-barcode"></i> Plaqueta:</b> ${esc(a.codigoPatrimonio)}</div>
+       <div><b><i class="fa-solid fa-user"></i> Funcionário:</b> ${esc(a.nomeFuncionario)} (mat. ${esc(a.matriculaFuncionario)})</div>
+       <div><b><i class="fa-solid fa-user-check"></i> Autorizado por:</b> ${esc(a.autorizadoPor)}</div>
+       <div><b><i class="fa-regular fa-calendar-check"></i> Válido até:</b> ${esc(fmt(a.dataValidade))}</div>`;
+    setEstado('ok'); beep(true);
+  } else {
+    document.getElementById('motivo').textContent = res.mensagem;
+    document.getElementById('dados-bad').innerHTML =
+      `<div><b><i class="fa-solid fa-barcode"></i> Código lido:</b> ${esc(codigo)}</div>`;
+    setEstado('bad'); beep(false);
+  }
+  restante = TEMPO; atualizarContador();
+  timer = setInterval(() => {
+    restante--;
+    if (restante <= 0) { clearInterval(timer); setEstado('idle'); focar(); }
+    else atualizarContador();
+  }, 1000);
+}
+function atualizarContador() {
+  document.getElementById('contador').innerHTML = `<i class="fa-regular fa-hourglass-half"></i> ${restante}s`;
+}
+
+/* ---------- Beep (sucesso = agudo curto; erro = grave longo) ---------- */
+function beep(ok) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = ok ? 'sine' : 'square'; o.frequency.value = ok ? 880 : 220;
+    g.gain.value = 0.15; o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + (ok ? 0.2 : 0.7));
+  } catch (e) { /* som é opcional */ }
+}
+
+/* ---------- Últimas 5 leituras ---------- */
+async function carregarUltimas() {
+  try {
+    const logs = await (await fetch('/api/logs?limite=5')).json();
+    document.getElementById('ultimas').innerHTML = logs.map(l => `
+      <div class="item ${l.liberado ? 'l' : 'b'}">
+        <div class="cod">${l.liberado ? '✅' : '❌'} ${esc(l.codigoLido)}</div>
+        <small>${esc(l.nomeFuncionario || l.mensagem)}</small>
+        <small>${new Date(l.dataHora).toLocaleTimeString('pt-BR')}</small>
+      </div>`).join('') || '<div class="item">Nenhuma leitura ainda</div>';
+  } catch (e) { /* ignora */ }
+}
+
+setInterval(() => document.getElementById('relogio').textContent =
+  new Date().toLocaleString('pt-BR', { dateStyle:'full', timeStyle:'medium' }), 1000);
+carregarUltimas(); setEstado('idle');
+</script>
+</body>
+</html>
